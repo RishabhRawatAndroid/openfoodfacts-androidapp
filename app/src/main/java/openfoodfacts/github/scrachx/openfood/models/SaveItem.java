@@ -6,16 +6,20 @@ public class SaveItem {
 
     private String title;
     private int icon;
-    private Bitmap url;
+    private String url;
     private String barcode;
+    private String weight;
+    private String brand;
 
     public SaveItem(){}
 
-    public SaveItem(String title, int icon, Bitmap url, String barcode) {
+    public SaveItem(String title, int icon, String url, String barcode , String weight ,String brand) {
         this.title = title;
         this.icon = icon;
         this.url = url;
         this.barcode = barcode;
+        this.brand = brand;
+        this.weight =weight;
     }
 
     public String getBarcode() {
@@ -42,11 +46,27 @@ public class SaveItem {
         this.icon = icon;
     }
 
-    public Bitmap getUrl() {
+    public String getUrl() {
         return url;
     }
 
-    public void setUrl(Bitmap url) {
+    public void setUrl(String url) {
         this.url = url;
+    }
+
+    public void setWeight(String weight){
+        this.weight = weight;
+    }
+
+    public String getWeight(){
+        return this.weight;
+    }
+
+    public void setBrand(String brand){
+        this.brand = brand;
+    }
+
+    public String getBrand(){
+        return this.brand;
     }
 }

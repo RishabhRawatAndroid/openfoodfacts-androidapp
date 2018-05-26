@@ -9,19 +9,27 @@ import android.view.ViewGroup;
 import android.widget.Button;
 import android.widget.TextView;
 
+import java.util.ArrayList;
 import java.util.List;
 
 import openfoodfacts.github.scrachx.openfood.R;
-import openfoodfacts.github.scrachx.openfood.models.Allergen;
-import openfoodfacts.github.scrachx.openfood.utils.Utils;
+import openfoodfacts.github.scrachx.openfood.models.AllergenName;
+import openfoodfacts.github.scrachx.openfood.repositories.IProductRepository;
 
 public class AllergensAdapter extends RecyclerView.Adapter<AllergensAdapter.ViewHolder> {
 
-    private List<Allergen> mAllergens;
+    private IProductRepository mProductRepository;
+    private List<AllergenName> mAllergens;
     private Activity mActivity;
-    public AllergensAdapter(List<Allergen> allergens, Activity activity) {
+
+    public AllergensAdapter(IProductRepository productRepository, List<AllergenName> allergens, Activity activity) {
+        mProductRepository = productRepository;
         mAllergens = allergens;
         mActivity = activity;
+    }
+
+    public void setAllergens(List<AllergenName> allergens) {
+        mAllergens = allergens;
     }
 
     public static class ViewHolder extends RecyclerView.ViewHolder {
@@ -31,8 +39,8 @@ public class AllergensAdapter extends RecyclerView.Adapter<AllergensAdapter.View
 
         public ViewHolder(View itemView) {
             super(itemView);
-            nameTextView = (TextView) itemView.findViewById(R.id.allergen_name);
-            messageButton = (Button) itemView.findViewById(R.id.delete_button);
+            nameTextView = itemView.findViewById(R.id.allergen_name);
+            messageButton = itemView.findViewById(R.id.delete_button);
         }
     }
 
@@ -46,21 +54,24 @@ public class AllergensAdapter extends RecyclerView.Adapter<AllergensAdapter.View
 
     @Override
     public void onBindViewHolder(final ViewHolder holder, final int position) {
-        final Allergen allergen = mAllergens.get(position);
+        final AllergenName allergen = mAllergens.get(position);
         TextView textView = holder.nameTextView;
-        textView.setText(allergen.getName().substring(allergen.getName().indexOf(":")+1));
+        textView.setText(allergen.getName().substring(allergen.getName().indexOf(":") + 1));
         Button button = holder.messageButton;
         button.setText(R.string.delete_txt);
         button.setOnClickListener(v -> {
             mAllergens.remove(holder.getAdapterPosition());
-            allergen.setEnable("false");
-            Utils.getAppDaoSession(mActivity).getAllergenDao().update(allergen);
             notifyItemRemoved(holder.getAdapterPosition());
+            mProductRepository.setAllergenEnabled(allergen.getAllergenTag(), false);
         });
     }
 
     @Override
     public int getItemCount() {
+        if (mAllergens == null) {
+            mAllergens = new ArrayList<AllergenName>();
+        }
+
         return mAllergens.size();
     }
 }

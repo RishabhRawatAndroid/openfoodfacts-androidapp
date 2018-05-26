@@ -1,6 +1,7 @@
 package openfoodfacts.github.scrachx.openfood.views.adapters;
 
 import android.content.Context;
+import android.support.v4.content.ContextCompat;
 import android.support.v7.widget.RecyclerView;
 import android.view.LayoutInflater;
 import android.view.View;
@@ -9,12 +10,14 @@ import android.widget.ImageView;
 import android.widget.ProgressBar;
 import android.widget.TextView;
 
+import com.squareup.picasso.Callback;
 import com.squareup.picasso.Picasso;
 
 import java.util.List;
 
 import openfoodfacts.github.scrachx.openfood.R;
 import openfoodfacts.github.scrachx.openfood.models.Product;
+import openfoodfacts.github.scrachx.openfood.utils.Utils;
 
 import static org.apache.commons.lang3.StringUtils.capitalize;
 import static org.apache.commons.lang3.StringUtils.isNotEmpty;
@@ -29,16 +32,18 @@ public class ProductsRecyclerViewAdapter extends RecyclerView.Adapter {
 
     private Context context;
     private final List<Product> products;
+    private boolean isLowBatteryMode;
 
-    public ProductsRecyclerViewAdapter(List<Product> items){
+    public ProductsRecyclerViewAdapter(List<Product> items, boolean isLowBatteryMode) {
         this.products = items;
+        this.isLowBatteryMode = isLowBatteryMode;
     }
 
     @Override
     public RecyclerView.ViewHolder onCreateViewHolder(ViewGroup parent, int viewType) {
         context = parent.getContext();
 
-        int layoutResourceId = viewType == VIEW_ITEM ? R.layout.products_list_item: R.layout.progressbar_endless_list;
+        int layoutResourceId = viewType == VIEW_ITEM ? R.layout.products_list_item : R.layout.progressbar_endless_list;
         View v = LayoutInflater.from(parent.getContext()).inflate(layoutResourceId, parent, false);
 
         if (viewType == VIEW_ITEM) {
@@ -59,13 +64,33 @@ public class ProductsRecyclerViewAdapter extends RecyclerView.Adapter {
         // - replace the contents of the view with that element
         if (holder instanceof ProductViewHolder) {
             ProductViewHolder productHolder = (ProductViewHolder) holder;
-            Picasso.with(context)
-                    .load(products.get(position).getImageSmallUrl())
-                    .placeholder(R.drawable.placeholder_thumb)
-                    .error(R.drawable.error_image)
-                    .fit()
-                    .centerCrop()
-                    .into(productHolder.vProductImage);
+            productHolder.vProductImageProgressbar.setVisibility(View.VISIBLE);
+            if (products.get(position).getImageSmallUrl() == null)
+                productHolder.vProductImageProgressbar.setVisibility(View.GONE);
+
+            // Load Image if isLowBatteryMode is false
+            if (!isLowBatteryMode) {
+                Picasso.with(context)
+                        .load(products.get(position).getImageSmallUrl())
+                        .placeholder(R.drawable.placeholder_thumb)
+                        .error(R.drawable.error_image)
+                        .fit()
+                        .centerCrop()
+                        .into(productHolder.vProductImage, new Callback() {
+                            @Override
+                            public void onSuccess() {
+                                productHolder.vProductImageProgressbar.setVisibility(View.GONE);
+                            }
+
+                            @Override
+                            public void onError() {
+                                productHolder.vProductImageProgressbar.setVisibility(View.GONE);
+                            }
+                        });
+            } else {
+                Picasso.with(context).load(R.drawable.placeholder_thumb).into(productHolder.vProductImage);
+                productHolder.vProductImageProgressbar.setVisibility(View.INVISIBLE);
+            }
 
             Product product = products.get(position);
 
@@ -78,6 +103,11 @@ public class ProductsRecyclerViewAdapter extends RecyclerView.Adapter {
 
             if (isNotEmpty(product.getQuantity())) {
                 stringBuilder.append(" - ").append(product.getQuantity());
+            }
+
+            if (isNotEmpty(product.getNutritionGradeFr())) {
+                productHolder.vProductGrade.setImageDrawable(ContextCompat.getDrawable(context, Utils.getSmallImageGrade(product
+                        .getNutritionGradeFr())));
             }
 
             productHolder.vProductDetails.setText(stringBuilder.toString());
@@ -101,14 +131,18 @@ public class ProductsRecyclerViewAdapter extends RecyclerView.Adapter {
     static class ProductViewHolder extends RecyclerView.ViewHolder {
 
         ImageView vProductImage;
+        ImageView vProductGrade;
         TextView vProductName;
         TextView vProductDetails;
+        ProgressBar vProductImageProgressbar;
 
         ProductViewHolder(View v) {
             super(v);
-            vProductImage = (ImageView) v.findViewById(R.id.imgProduct);
-            vProductName = (TextView) v.findViewById(R.id.nameProduct);
-            vProductDetails = (TextView) v.findViewById(R.id.productDetails);
+            vProductImage = v.findViewById(R.id.imgProduct);
+            vProductGrade = v.findViewById(R.id.imgGrade);
+            vProductName = v.findViewById(R.id.nameProduct);
+            vProductDetails = v.findViewById(R.id.productDetails);
+            vProductImageProgressbar = v.findViewById(R.id.searchImgProgressbar);
         }
     }
 
@@ -117,7 +151,7 @@ public class ProductsRecyclerViewAdapter extends RecyclerView.Adapter {
 
         public ProgressViewHolder(View v) {
             super(v);
-            progressBar = (ProgressBar) v.findViewById(R.id.progressBar1);
+            progressBar = v.findViewById(R.id.progressBar1);
         }
     }
 

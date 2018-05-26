@@ -1,5 +1,7 @@
 package openfoodfacts.github.scrachx.openfood.category.network;
 
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+
 import java.util.Collections;
 import java.util.List;
 
@@ -28,6 +30,7 @@ public class CategoryResponse {
         return tags;
     }
 
+    @JsonIgnoreProperties(ignoreUnknown = true)
     public static class Tag{
         private final String id;
         private final String name;
@@ -42,7 +45,7 @@ public class CategoryResponse {
         }
 
         public Tag() {
-            this("", "", "", 0);
+            this("", "", "",0 );
         }
 
         public String getId() {

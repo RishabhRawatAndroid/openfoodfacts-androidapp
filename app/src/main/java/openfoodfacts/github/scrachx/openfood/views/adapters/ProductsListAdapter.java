@@ -51,8 +51,8 @@ public class ProductsListAdapter extends BaseAdapter {
             convertView = mInflater.inflate(R.layout.products_list_item, null);
         }
 
-        ImageView imgIcon = (ImageView) convertView.findViewById(R.id.imgProduct);
-        TextView txtTitle = (TextView) convertView.findViewById(R.id.nameProduct);
+        ImageView imgIcon = convertView.findViewById(R.id.imgProduct);
+        TextView txtTitle = convertView.findViewById(R.id.nameProduct);
 
         Picasso.with(context)
                 .load(products.get(position).getImageSmallUrl())
@@ -65,11 +65,11 @@ public class ProductsListAdapter extends BaseAdapter {
         Product product = products.get(position);
         StringBuilder stringBuilder = new StringBuilder(product.getProductName() + "\n");
 
-        if (!product.getBrands().isEmpty()) {
+        if (product != null && !product.getBrands().isEmpty()) {
             stringBuilder.append(StringUtils.capitalize(product.getBrands().split(",")[0].trim()));
         }
 
-        if (!product.getQuantity().isEmpty()) {
+        if (product != null && !product.getQuantity().isEmpty()) {
             stringBuilder.append(" - ").append(product.getQuantity());
         }
 

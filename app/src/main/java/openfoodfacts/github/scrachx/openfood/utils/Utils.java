@@ -1,24 +1,48 @@
 package openfoodfacts.github.scrachx.openfood.utils;
 
+import android.Manifest;
+import android.annotation.TargetApi;
 import android.app.Activity;
 import android.content.Context;
+import android.content.Intent;
+import android.content.IntentFilter;
+import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
 import android.graphics.Canvas;
 import android.graphics.Typeface;
 import android.graphics.drawable.Drawable;
+import android.net.ConnectivityManager;
+import android.net.NetworkInfo;
+import android.net.Uri;
+import android.os.BatteryManager;
 import android.os.Build;
+import android.os.Environment;
+import android.provider.Settings;
 import android.support.annotation.DrawableRes;
+import android.support.customtabs.CustomTabsIntent;
+import android.support.v4.app.ActivityCompat;
 import android.support.v4.content.ContextCompat;
 import android.support.v7.content.res.AppCompatResources;
 import android.text.Spannable;
+import android.text.SpannableString;
 import android.text.SpannableStringBuilder;
 import android.text.Spanned;
+import android.text.style.ClickableSpan;
 import android.text.style.StyleSpan;
 import android.util.Log;
 import android.view.View;
 import android.view.inputmethod.InputMethodManager;
+
+import com.afollestad.materialdialogs.MaterialDialog;
+import com.firebase.jobdispatcher.Constraint;
+import com.firebase.jobdispatcher.Driver;
+import com.firebase.jobdispatcher.FirebaseJobDispatcher;
+import com.firebase.jobdispatcher.GooglePlayDriver;
+import com.firebase.jobdispatcher.Job;
+import com.firebase.jobdispatcher.Lifetime;
+import com.firebase.jobdispatcher.Trigger;
 
 import java.io.File;
 import java.io.FileInputStream;
@@ -26,12 +50,24 @@ import java.io.FileNotFoundException;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.OutputStream;
+import java.util.Collections;
 import java.util.Locale;
+import java.util.concurrent.TimeUnit;
 
+import okhttp3.CipherSuite;
+import okhttp3.ConnectionSpec;
+import okhttp3.OkHttpClient;
+import okhttp3.TlsVersion;
+import okhttp3.logging.HttpLoggingInterceptor;
 import openfoodfacts.github.scrachx.openfood.BuildConfig;
 import openfoodfacts.github.scrachx.openfood.R;
+import openfoodfacts.github.scrachx.openfood.jobs.SavedProductUploadJob;
 import openfoodfacts.github.scrachx.openfood.models.DaoSession;
 import openfoodfacts.github.scrachx.openfood.views.OFFApplication;
+import openfoodfacts.github.scrachx.openfood.views.ProductBrowsingListActivity;
+import openfoodfacts.github.scrachx.openfood.views.ScannerFragmentActivity;
+import openfoodfacts.github.scrachx.openfood.views.customtabs.CustomTabActivityHelper;
+import openfoodfacts.github.scrachx.openfood.views.customtabs.WebViewFallback;
 
 import static android.text.TextUtils.isEmpty;
 
@@ -39,6 +75,9 @@ public class Utils {
 
     public static final int MY_PERMISSIONS_REQUEST_CAMERA = 1;
     public static final int MY_PERMISSIONS_REQUEST_STORAGE = 2;
+    public static final String UPLOAD_JOB_TAG = "upload_saved_product_job";
+    public static boolean isUploadJobInitialised;
+    public static boolean DISABLE_IMAGE_LOAD = false;
 
     /**
      * Returns a CharSequence that concatenates the specified array of CharSequence
@@ -94,12 +133,14 @@ public class Utils {
     }
 
     public static void hideKeyboard(Activity activity) {
-        InputMethodManager imm = (InputMethodManager) activity.getSystemService(Activity.INPUT_METHOD_SERVICE);
         View view = activity.getCurrentFocus();
-        if (view == null) {
-            view = new View(activity);
+
+        if (view != null) {
+            InputMethodManager imm = (InputMethodManager) activity.getSystemService(Activity.INPUT_METHOD_SERVICE);
+            if (imm != null) {
+                imm.hideSoftInputFromWindow(view.getWindowToken(), 0);
+            }
         }
-        imm.hideSoftInputFromWindow(view.getWindowToken(), 0);
     }
 
     public static String compressImage(String url) {
@@ -162,6 +203,7 @@ public class Utils {
             o2.inSampleSize = scale;
             return BitmapFactory.decodeStream(new FileInputStream(f), null, o2);
         } catch (FileNotFoundException e) {
+            e.printStackTrace();
         }
         return null;
     }
@@ -178,7 +220,8 @@ public class Utils {
         //private boolean isApplicationInstalled(Context context, String packageName) {
         PackageManager pm = context.getPackageManager();
         try {
-            // Check if the package name exists, if exception is thrown, package name does not exist.
+            // Check if the package name exists, if exception is thrown, package name does not
+            // exist.
             pm.getPackageInfo(packageName, PackageManager.GET_ACTIVITIES);
             return true;
         } catch (PackageManager.NameNotFoundException e) {
@@ -193,7 +236,7 @@ public class Utils {
             return R.drawable.ic_error;
         }
 
-        switch (grade.toLowerCase()) {
+        switch (grade.toLowerCase(Locale.getDefault())) {
             case "a":
                 drawable = R.drawable.nnc_a;
                 break;
@@ -217,9 +260,41 @@ public class Utils {
         return drawable;
     }
 
+    public static int getSmallImageGrade(String grade) {
+        int drawable;
+
+        if (grade == null) {
+            return R.drawable.ic_error;
+        }
+
+        switch (grade.toLowerCase(Locale.getDefault())) {
+            case "a":
+                drawable = R.drawable.nnc_small_a;
+                break;
+            case "b":
+                drawable = R.drawable.nnc_small_b;
+                break;
+            case "c":
+                drawable = R.drawable.nnc_small_c;
+                break;
+            case "d":
+                drawable = R.drawable.nnc_small_d;
+                break;
+            case "e":
+                drawable = R.drawable.nnc_small_e;
+                break;
+            default:
+                drawable = R.drawable.ic_error;
+                break;
+        }
+
+        return drawable;
+    }
+
     public static Bitmap getBitmapFromDrawable(Context context, @DrawableRes int drawableId) {
         Drawable drawable = AppCompatResources.getDrawable(context, drawableId);
-        Bitmap bitmap = Bitmap.createBitmap(drawable.getIntrinsicWidth(), drawable.getIntrinsicHeight(), Bitmap.Config.ARGB_8888);
+        Bitmap bitmap = Bitmap.createBitmap(drawable.getIntrinsicWidth(), drawable
+                .getIntrinsicHeight(), Bitmap.Config.ARGB_8888);
         Canvas canvas = new Canvas(bitmap);
         drawable.setBounds(0, 0, canvas.getWidth(), canvas.getHeight());
         drawable.draw(canvas);
@@ -250,8 +325,13 @@ public class Utils {
         return String.format(Locale.getDefault(), "%.2f", Double.valueOf(value));
     }
 
-    public static DaoSession getAppDaoSession(Activity activity) {
-        return ((OFFApplication) activity.getApplication()).getDaoSession();
+    public static DaoSession getAppDaoSession(Context context) {
+        return ((OFFApplication) context.getApplicationContext()).getDaoSession();
+    }
+
+
+    public static DaoSession getDaoSession(Context context) {
+        return OFFApplication.daoSession;
     }
 
     /**
@@ -270,4 +350,257 @@ public class Utils {
         }
         return false;
     }
+
+    /**
+     * Schedules job to download when network is available
+     */
+
+    synchronized public static void scheduleProductUploadJob(Context context) {
+        if (isUploadJobInitialised) return;
+        final int periodicity = (int) TimeUnit.MINUTES.toSeconds(30);
+        final int toleranceInterval = (int) TimeUnit.MINUTES.toSeconds(5);
+        Driver driver = new GooglePlayDriver(context);
+        FirebaseJobDispatcher jobDispatcher = new FirebaseJobDispatcher(driver);
+        Job uploadJob = jobDispatcher.newJobBuilder()
+                .setService(SavedProductUploadJob.class)
+                .setTag(UPLOAD_JOB_TAG)
+                .setConstraints(Constraint.ON_UNMETERED_NETWORK)
+                .setLifetime(Lifetime.FOREVER)
+                .setRecurring(false)
+                .setTrigger(Trigger.executionWindow(periodicity, periodicity + toleranceInterval))
+                .setReplaceCurrent(false)
+                .build();
+        jobDispatcher.schedule(uploadJob);
+        isUploadJobInitialised = true;
+    }
+
+    public static OkHttpClient HttpClientBuilder() {
+        OkHttpClient httpClient;
+        if (Build.VERSION.SDK_INT == 24) {
+            ConnectionSpec spec = new ConnectionSpec.Builder(ConnectionSpec.MODERN_TLS)
+                    .tlsVersions(TlsVersion.TLS_1_2)
+                    .cipherSuites(CipherSuite.TLS_DHE_RSA_WITH_AES_128_GCM_SHA256)
+                    .build();
+
+            httpClient = new OkHttpClient.Builder()
+                    .connectTimeout(5000, TimeUnit.MILLISECONDS)
+                    .readTimeout(30000, TimeUnit.MILLISECONDS)
+                    .writeTimeout(30000, TimeUnit.MILLISECONDS)
+                    .connectionSpecs(Collections.singletonList(spec))
+                    .addInterceptor(new HttpLoggingInterceptor().setLevel(HttpLoggingInterceptor.Level.BODY))
+                    .build();
+        } else {
+            httpClient = new OkHttpClient.Builder()
+                    .connectTimeout(5000, TimeUnit.MILLISECONDS)
+                    .readTimeout(30000, TimeUnit.MILLISECONDS)
+                    .writeTimeout(30000, TimeUnit.MILLISECONDS)
+                    .addInterceptor(new HttpLoggingInterceptor().setLevel(HttpLoggingInterceptor.Level.BODY))
+                    .build();
+        }
+        return httpClient;
+    }
+
+    /**
+     * Check if airplane mode is turned on on the device.
+     *
+     * @param context of the application.
+     * @return true if airplane mode is active.
+     */
+    @SuppressWarnings("depreciation")
+    @TargetApi(Build.VERSION_CODES.JELLY_BEAN_MR1)
+    public static boolean isAirplaneModeActive(Context context) {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.JELLY_BEAN_MR1) {
+            return Settings.System.getInt(context.getContentResolver(),
+                    Settings.System.AIRPLANE_MODE_ON, 0) != 0;
+        } else {
+            return Settings.Global.getInt(context.getContentResolver(),
+                    Settings.Global.AIRPLANE_MODE_ON, 0) != 0;
+        }
+    }
+
+    /**
+     * Check if the user is connected to a network. This can be any network.
+     *
+     * @param context of the application.
+     * @return true if connected or connecting. False otherwise.
+     */
+    public static boolean isNetworkConnected(Context context) {
+        ConnectivityManager cm = (ConnectivityManager) context.getSystemService(Context.CONNECTIVITY_SERVICE);
+        NetworkInfo activeNetwork = cm.getActiveNetworkInfo();
+
+        return activeNetwork != null && activeNetwork.isConnectedOrConnecting();
+    }
+
+    /**
+     * Check if the user is connected to a mobile network.
+     *
+     * @param context of the application.
+     * @return true if connected to mobile data.
+     */
+    public static boolean isConnectedToMobileData(Context context) {
+        return getNetworkType(context).equals("Mobile");
+    }
+
+    /**
+     * Get the type of network that the user is connected to.
+     *
+     * @param context of the application.
+     * @return the type of network that is connected.
+     */
+    private static String getNetworkType(Context context) {
+        ConnectivityManager cm = (ConnectivityManager) context.getSystemService(Context.CONNECTIVITY_SERVICE);
+        NetworkInfo activeNetwork = cm.getActiveNetworkInfo();
+
+        if (activeNetwork != null && activeNetwork.isConnectedOrConnecting()) {
+            switch (activeNetwork.getType()) {
+                case ConnectivityManager.TYPE_ETHERNET:
+                    return "Ethernet";
+                case ConnectivityManager.TYPE_MOBILE:
+                    return "Mobile";
+                case ConnectivityManager.TYPE_VPN:
+                    return "VPN";
+                case ConnectivityManager.TYPE_WIFI:
+                    return "WiFi";
+                case ConnectivityManager.TYPE_WIMAX:
+                    return "WiMax";
+            }
+        }
+
+        return "Other";
+    }
+
+    public static String timeStamp() {
+        Long tsLong = System.currentTimeMillis();
+        return tsLong.toString();
+    }
+
+
+    public static File makeOrGetPictureDirectory(Context context) {
+        // determine the profile directory
+        File dir = context.getFilesDir();
+
+        if (isExternalStorageWritable()) {
+            dir = context.getExternalFilesDir(null);
+        }
+        File picDir = new File(dir, "Pictures");
+        if (picDir.exists()) {
+            return picDir;
+        }
+        // creates the directory if not present yet
+        picDir.mkdir();
+
+        return picDir;
+    }
+
+    public static boolean isExternalStorageWritable() {
+        String state = Environment.getExternalStorageState();
+        return Environment.MEDIA_MOUNTED.equals(state);
+    }
+
+    public static Uri getOutputPicUri(Context context) {
+        return (Uri.fromFile(new File(Utils.makeOrGetPictureDirectory(context), "/" + Utils.timeStamp() + ".jpg")));
+    }
+
+    public static CharSequence getClickableText(String text, String urlParameter, @SearchType String type, Activity activity, CustomTabsIntent customTabsIntent) {
+        ClickableSpan clickableSpan;
+        String url = SearchType.URLS.get(type);
+
+        if (url == null) {
+            clickableSpan = new ClickableSpan() {
+                @Override
+                public void onClick(View view) {
+                    ProductBrowsingListActivity.startActivity(activity, text, type);
+                }
+            };
+        } else {
+            Uri uri = Uri.parse(url + urlParameter);
+            clickableSpan = new ClickableSpan() {
+                @Override
+                public void onClick(View textView) {
+                    CustomTabActivityHelper.openCustomTab(activity, customTabsIntent, uri, new WebViewFallback());
+                }
+            };
+        }
+
+        SpannableString spannableText = new SpannableString(text);
+        spannableText.setSpan(clickableSpan, 0, text.length(), Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+        return spannableText;
+
+    }
+
+    /**
+     * convert energy from kj to kcal for a product.
+     *
+     * @param value of energy in kj.
+     * @return energy in kcal.
+     */
+    public static String getEnergy(String value) {
+        String defaultValue = "0";
+        if (defaultValue.equals(value) || isEmpty(value)) {
+            return defaultValue;
+        }
+
+        try {
+            int energyKcal = convertKjToKcal(Integer.parseInt(value));
+            return String.valueOf(energyKcal);
+        } catch (NumberFormatException e) {
+            return defaultValue;
+        }
+    }
+
+    private static int convertKjToKcal(int kj) {
+        return kj != 0 ? Double.valueOf(((double) kj) / 4.1868d).intValue() : -1;
+    }
+
+   /**
+     * Function which returns true if the battery level is low
+     *
+     * @param context
+     * @return true if battery is low or false if battery in not low
+      */
+    public static boolean getBatteryLevel(Context context) {
+        IntentFilter ifilter = new IntentFilter(Intent.ACTION_BATTERY_CHANGED);
+        Intent batteryStatus = context.registerReceiver(null, ifilter);
+        int level = batteryStatus.getIntExtra(BatteryManager.EXTRA_LEVEL, -1);
+        int scale = batteryStatus.getIntExtra(BatteryManager.EXTRA_SCALE, -1);
+
+        float batteryPct = (level / (float) scale);
+        Log.i("BATTERYSTATUS", String.valueOf(batteryPct));
+
+        return (int) ((batteryPct) * 100) <= 15;
+    }
+
+    /*
+    * Function to open ScannerFragmentActivity to facilitate scanning
+    * @param activity
+    */
+    public static void scan(Activity activity) {
+
+
+        if (ContextCompat.checkSelfPermission(activity, Manifest.permission.CAMERA) !=
+                PackageManager.PERMISSION_GRANTED) {
+            if (ActivityCompat.shouldShowRequestPermissionRationale(activity, Manifest
+                    .permission.CAMERA)) {
+                new MaterialDialog.Builder(activity)
+                        .title(R.string.action_about)
+                        .content(R.string.permission_camera)
+                        .neutralText(R.string.txtOk)
+                        .show().setOnDismissListener(dialogInterface -> ActivityCompat.requestPermissions(activity,
+                        new String[]{Manifest.permission.CAMERA},
+                        Utils.MY_PERMISSIONS_REQUEST_CAMERA));
+
+            } else {
+                ActivityCompat.requestPermissions(activity, new String[]{Manifest
+                        .permission.CAMERA}, Utils.MY_PERMISSIONS_REQUEST_CAMERA);
+            }
+        } else {
+            Intent intent = new Intent(activity, ScannerFragmentActivity.class);
+            activity.startActivity(intent);
+        }
+
+
+    }
+
+
 }
+

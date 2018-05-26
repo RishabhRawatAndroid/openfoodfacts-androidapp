@@ -2,7 +2,9 @@ package openfoodfacts.github.scrachx.openfood.fragments;
 
 
 import android.os.Bundle;
+import android.support.annotation.NonNull;
 import android.support.annotation.Nullable;
+import android.support.v7.app.AppCompatActivity;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
@@ -16,21 +18,25 @@ import butterknife.BindView;
 import butterknife.OnClick;
 import openfoodfacts.github.scrachx.openfood.R;
 import openfoodfacts.github.scrachx.openfood.network.OpenFoodAPIClient;
+import openfoodfacts.github.scrachx.openfood.utils.NavigationDrawerListener.NavigationDrawerType;
 import openfoodfacts.github.scrachx.openfood.utils.Utils;
 
-public class FindProductFragment extends BaseFragment {
+import static openfoodfacts.github.scrachx.openfood.utils.NavigationDrawerListener.ITEM_SEARCH_BY_CODE;
+
+public class FindProductFragment extends NavigationBaseFragment {
 
     @BindView(R.id.editTextBarcode) EditText mBarCodeText;
     @BindView(R.id.buttonBarcode) Button mLaunchButton;
     private OpenFoodAPIClient api;
+    private Toast mToast;
 
     @Override
-    public View onCreateView(LayoutInflater inflater, ViewGroup container, Bundle savedInstanceState) {
+    public View onCreateView(@NonNull LayoutInflater inflater, ViewGroup container, Bundle savedInstanceState) {
         return createView(inflater, container, R.layout.fragment_find_product);
     }
 
     @Override
-    public void onViewCreated(View view, @Nullable Bundle savedInstanceState) {
+    public void onViewCreated(@NonNull View view, @Nullable Bundle savedInstanceState) {
         super.onViewCreated(view, savedInstanceState);
         mBarCodeText.setSelected(false);
         api = new OpenFoodAPIClient(getActivity());
@@ -40,13 +46,45 @@ public class FindProductFragment extends BaseFragment {
     protected void onSearchBarcodeProduct() {
         Utils.hideKeyboard(getActivity());
         if (mBarCodeText.getText().toString().isEmpty()) {
-            Toast.makeText(getActivity(), getResources().getString(R.string.txtBarcodeRequire), Toast.LENGTH_LONG).show();
+            displayToast(getResources().getString(R.string.txtBarcodeRequire));
         } else {
             if (EAN13CheckDigit.EAN13_CHECK_DIGIT.isValid(mBarCodeText.getText().toString()) && (!mBarCodeText.getText().toString().substring(0, 3).contains("977") || !mBarCodeText.getText().toString().substring(0, 3).contains("978") || !mBarCodeText.getText().toString().substring(0, 3).contains("979"))) {
                 api.getProduct(mBarCodeText.getText().toString(), getActivity());
             } else {
-                Toast.makeText(getActivity(), getResources().getString(R.string.txtBarcodeNotValid), Toast.LENGTH_LONG).show();
+                displayToast(getResources().getString(R.string.txtBarcodeNotValid));
             }
         }
+    }
+
+    @Override
+    @NavigationDrawerType
+    public int getNavigationDrawerType() {
+        return ITEM_SEARCH_BY_CODE;
+    }
+
+    public void displayToast(String message) {
+        if (mToast != null)
+            mToast.cancel();
+        mToast = Toast.makeText(getContext(), message, Toast.LENGTH_SHORT);
+        mToast.show();
+    }
+    public void onResume() {
+
+        super.onResume();
+
+        try {
+            ((AppCompatActivity) getActivity()).getSupportActionBar().setTitle(getString(R.string.search_by_barcode_drawer));
+        } catch (NullPointerException e) {
+            e.printStackTrace();
+        }
+
+    }
+
+    @Override
+    public void onPause() {
+        if (mToast != null)
+            mToast.cancel();
+
+        super.onPause();
     }
 }
